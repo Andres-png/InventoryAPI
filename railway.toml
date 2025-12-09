@@ -1,0 +1,8 @@
+﻿[build]
+builder = "dockerfile"
+dockerfilePath = "./InventoryAPI/Dockerfile"
+
+[deploy]
+startCommand = "./InventoryAPI"
+restartPolicyType = "always"
+healthcheckPath = "/health"
