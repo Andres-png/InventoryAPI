@@ -29,7 +29,7 @@ namespace InventoryApi.Extensions
                 return Results.Ok(new { message = "Usuario registrado exitosamente" });
             });
 
-            app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db, IJwtService jwtService) =>
+            app.MapPost("api/auth/login", async (LoginRequest req, AppDbContext db, IJwtService jwtService) =>
             {
                 var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username);
                 if (user == null || !BCrypt.Net.BCrypt.Verify(req.Password, user.Password))
