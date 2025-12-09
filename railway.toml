@@ -1,8 +1,8 @@
 ﻿[build]
 builder = "dockerfile"
-dockerfilePath = "./InventoryAPI/Dockerfile"
+dockerfilePath = "./Dockerfile"
 
 [deploy]
-startCommand = "./InventoryAPI"
+startCommand = "dotnet InventoryAPI.dll"
 restartPolicyType = "always"
 healthcheckPath = "/health"
