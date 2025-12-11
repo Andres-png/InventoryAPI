@@ -20,8 +20,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins("https://inventory-frontend-sigma-lilac.vercel.app")
               .AllowAnyMethod()
-              .AllowAnyHeader();
-              // Si usas credenciales (cookies/Authorization por cookie) añade .AllowCredentials()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
