@@ -8,20 +8,20 @@ using InventoryApi.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
 
 builder.Services.AddHealthChecks();
 
-
-
-// Configuración básica
+// CORS: permitir sólo el frontend desplegado (más seguro que AllowAnyOrigin)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        policy.WithOrigins("https://inventory-frontend-sigma-lilac.vercel.app")
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+              // Si usas credenciales (cookies/Authorization por cookie) añade .AllowCredentials()
     });
 });
 
@@ -52,6 +52,9 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Aplicar CORS lo antes posible para que incluso respuestas de error incluyan el header
+app.UseCors("AllowFrontend");
+
 // Seed inicial
 using (var scope = app.Services.CreateScope())
 {
@@ -60,8 +63,8 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
     InventoryApi.Data.DbSeeder.SeedAdmin(db);
 }
+
 app.UseHealthChecks("/health");
-app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
