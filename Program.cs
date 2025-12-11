@@ -5,6 +5,8 @@ using System.Text;
 using InventoryApi.Data;
 using InventoryApi.Services;
 using InventoryApi.Extensions;
+using Microsoft.EntityFrameworkCore;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +15,7 @@ builder.WebHost.UseUrls($"http://*:{port}");
 
 builder.Services.AddHealthChecks();
 
-// CORS: permitir sólo el frontend desplegado (más seguro que AllowAnyOrigin)
+// CORS: permitir sólo el frontend desplegado   
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
