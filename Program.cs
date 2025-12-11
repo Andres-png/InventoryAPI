@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -15,7 +14,7 @@ builder.WebHost.UseUrls($"http://*:{port}");
 
 builder.Services.AddHealthChecks();
 
-// CORS: permitir sólo el frontend desplegado   
+// CORS: permitir sólo el frontend desplegado
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -27,7 +26,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Jwt key (mantenlo aquí o muévelo a appsettings.json)
+// Jwt key
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey123456789012345678901234567890";
 builder.Services.AddSingleton<IJwtService>(new JwtService(jwtKey));
 
