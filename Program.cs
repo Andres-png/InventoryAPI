@@ -5,16 +5,16 @@ using InventoryApi.Data;
 using InventoryApi.Services;
 using InventoryApi.Extensions;
 using Microsoft.EntityFrameworkCore;
-using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Railway port
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
 
 builder.Services.AddHealthChecks();
 
-// CORS: permitir sólo el frontend desplegado
+// CORS: frontend Vercel
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -26,8 +26,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Jwt key
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey123456789012345678901234567890";
+// JWT
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? "SuperSecretKey123456789012345678901234567890";
+
 builder.Services.AddSingleton<IJwtService>(new JwtService(jwtKey));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -44,25 +46,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// DbContext configurado vía DI
+// 🔵 MySQL Railway (OPCIÓN 1)
+var connectionString =
+    $"Server={Environment.GetEnvironmentVariable("MYSQLHOST")};" +
+    $"Port={Environment.GetEnvironmentVariable("MYSQLPORT")};" +
+    $"Database={Environment.GetEnvironmentVariable("MYSQLDATABASE")};" +
+    $"User={Environment.GetEnvironmentVariable("MYSQLUSER")};" +
+    $"Password={Environment.GetEnvironmentVariable("MYSQLPASSWORD")};" +
+    "SslMode=Required;";
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=inventory.db"));
+    options.UseMySql(
+        connectionString,
+        ServerVersion.AutoDetect(connectionString)
+    ));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Aplicar CORS lo antes posible para que incluso respuestas de error incluyan el header
+// CORS primero
 app.UseCors("AllowFrontend");
 
-// Seed inicial
+// Migraciones + seed
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var db = services.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    InventoryApi.Data.DbSeeder.SeedAdmin(db);
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+    DbSeeder.SeedAdmin(db);
 }
 
 app.UseHealthChecks("/health");
@@ -75,7 +87,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Mapear endpoints desde extensiones
+// Endpoints
 app.MapAuthEndpoints();
 app.MapUserEndpoints();
 app.MapHardwareEndpoints();
