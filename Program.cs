@@ -1,33 +1,34 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using InventoryApi.Data;
 using InventoryApi.Services;
 using InventoryApi.Extensions;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Railway port
+// 🚀 Railway PORT
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://*:{port}");
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
+// Healthchecks
 builder.Services.AddHealthChecks();
 
-// CORS: frontend Vercel
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins("https://inventory-frontend-sigma-lilac.vercel.app")
-              .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowAnyMethod();
     });
 });
 
 // JWT
 var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? Environment.GetEnvironmentVariable("JWT_KEY")
     ?? "SuperSecretKey123456789012345678901234567890";
 
 builder.Services.AddSingleton<IJwtService>(new JwtService(jwtKey));
@@ -46,20 +47,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// 🔵 MySQL Railway (OPCIÓN 1)
-var connectionString =
-    $"Server={Environment.GetEnvironmentVariable("MYSQLHOST")};" +
-    $"Port={Environment.GetEnvironmentVariable("MYSQLPORT")};" +
-    $"Database={Environment.GetEnvironmentVariable("MYSQLDATABASE")};" +
-    $"User={Environment.GetEnvironmentVariable("MYSQLUSER")};" +
-    $"Password={Environment.GetEnvironmentVariable("MYSQLPASSWORD")};" +
-    "SslMode=Required;";
+
+// 🔥 MYSQL RAILWAY (CLAVE)
+var mysqlUrl = Environment.GetEnvironmentVariable("MYSQL_URL");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
-        connectionString,
-        ServerVersion.AutoDetect(connectionString)
-    ));
+        mysqlUrl,
+        ServerVersion.AutoDetect(mysqlUrl),
+        mySqlOptions =>
+        {
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null
+            );
+        }
+    )
+);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -69,7 +74,11 @@ var app = builder.Build();
 // CORS primero
 app.UseCors("AllowFrontend");
 
-// Migraciones + seed
+// 🟢 Health check REAL
+app.MapHealthChecks("/health");
+
+
+// 🔥 MIGRACIONES (NO EnsureCreated)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -77,17 +86,9 @@ using (var scope = app.Services.CreateScope())
     DbSeeder.SeedAdmin(db);
 }
 
-app.UseHealthChecks("/health");
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-// Endpoints
 app.MapAuthEndpoints();
 app.MapUserEndpoints();
 app.MapHardwareEndpoints();
