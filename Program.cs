@@ -1,36 +1,33 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using InventoryApi.Data;
 using InventoryApi.Services;
 using InventoryApi.Extensions;
+using Microsoft.EntityFrameworkCore;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 🚀 Railway PORT
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+builder.WebHost.UseUrls($"http://*:{port}");
 
-// Healthchecks
 builder.Services.AddHealthChecks();
 
-// CORS
+// CORS: permitir sólo el frontend desplegado
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins("https://inventory-frontend-sigma-lilac.vercel.app")
+              .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowCredentials();
     });
 });
 
-// JWT
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? Environment.GetEnvironmentVariable("JWT_KEY")
-    ?? "SuperSecretKey123456789012345678901234567890";
-
+// Jwt key
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey123456789012345678901234567890";
 builder.Services.AddSingleton<IJwtService>(new JwtService(jwtKey));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -47,48 +44,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-
-// 🔥 MYSQL RAILWAY (CLAVE)
-var mysqlUrl = Environment.GetEnvironmentVariable("MYSQL_URL");
-
+// DbContext configurado vía DI
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(
-        mysqlUrl,
-        ServerVersion.AutoDetect(mysqlUrl),
-        mySqlOptions =>
-        {
-            mySqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null
-            );
-        }
-    )
-);
+    options.UseSqlite("Data Source=inventory.db"));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// CORS primero
+// Aplicar CORS lo antes posible para que incluso respuestas de error incluyan el header
 app.UseCors("AllowFrontend");
 
-// 🟢 Health check REAL
-app.MapHealthChecks("/health");
-
-
-// 🔥 MIGRACIONES (NO EnsureCreated)
+// Seed inicial
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-    DbSeeder.SeedAdmin(db);
+    var services = scope.ServiceProvider;
+    var db = services.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+    InventoryApi.Data.DbSeeder.SeedAdmin(db);
 }
 
+app.UseHealthChecks("/health");
 app.UseAuthentication();
 app.UseAuthorization();
 
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// Mapear endpoints desde extensiones
 app.MapAuthEndpoints();
 app.MapUserEndpoints();
 app.MapHardwareEndpoints();
