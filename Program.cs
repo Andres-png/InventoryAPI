@@ -1,20 +1,27 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using InventoryApi.Data;
 using InventoryApi.Services;
 using InventoryApi.Extensions;
-using Microsoft.EntityFrameworkCore;
-using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// =======================
+// Puerto Railway
+// =======================
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
 
+// =======================
+// Health
+// =======================
 builder.Services.AddHealthChecks();
 
-// CORS: permitir sólo el frontend desplegado
+// =======================
+// CORS
+// =======================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -26,8 +33,12 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Jwt key
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey123456789012345678901234567890";
+// =======================
+// JWT
+// =======================
+var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY")
+             ?? "SuperSecretKey123456789012345678901234567890";
+
 builder.Services.AddSingleton<IJwtService>(new JwtService(jwtKey));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -44,38 +55,64 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// DbContext configurado vía DI
+// =======================
+// MySQL (Railway vars)
+// =======================
+var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT");
+var mysqlDb = Environment.GetEnvironmentVariable("MYSQL_DATABASE");
+var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER");
+var mysqlPass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD");
+
+var connectionString =
+    $"server={mysqlHost};" +
+    $"port={mysqlPort};" +
+    $"database={mysqlDb};" +
+    $"user={mysqlUser};" +
+    $"password={mysqlPass};";
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=inventory.db"));
+    options.UseMySql(
+        connectionString,
+        ServerVersion.AutoDetect(connectionString)
+    )
+);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Aplicar CORS lo antes posible para que incluso respuestas de error incluyan el header
+// =======================
+// Middlewares
+// =======================
 app.UseCors("AllowFrontend");
-
-// Seed inicial
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var db = services.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    InventoryApi.Data.DbSeeder.SeedAdmin(db);
-}
-
 app.UseHealthChecks("/health");
 app.UseAuthentication();
 app.UseAuthorization();
 
+// =======================
+// Migraciones + Seed
+// =======================
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+    DbSeeder.SeedAdmin(db);
+}
+
+// =======================
+// Swagger
+// =======================
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Mapear endpoints desde extensiones
+// =======================
+// Endpoints
+// =======================
 app.MapAuthEndpoints();
 app.MapUserEndpoints();
 app.MapHardwareEndpoints();
